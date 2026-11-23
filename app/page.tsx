@@ -1,18 +1,20 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Language = "en" | "vi";
 
 type Job = {
-  id: number;
+  id: string;
   title: string;
   company: string;
   location: string;
   category: string;
   type: string;
   salary: string;
+  apply_url: string;
 };
 
 const translations = {
@@ -102,81 +104,71 @@ const translations = {
   },
 };
 
-const jobs: Job[] = [
-  {
-    id: 1,
-    title: "AI Data Annotator",
-    company: "Demo Company A",
-    location: "Worldwide",
-    category: "Data Annotation",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-  {
-    id: 2,
-    title: "AI Domain Expert",
-    company: "Demo Company B",
-    location: "United States",
-    category: "AI Training",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-  {
-    id: 3,
-    title: "Audio Transcription Specialist",
-    company: "Demo Company C",
-    location: "Worldwide",
-    category: "Transcription",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-  {
-    id: 4,
-    title: "Remote AI Content Evaluator",
-    company: "Demo Company D",
-    location: "Europe",
-    category: "AI Training",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-  {
-    id: 5,
-    title: "Freelance Data Labeling Specialist",
-    company: "Demo Company E",
-    location: "Worldwide",
-    category: "Data Annotation",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-  {
-    id: 6,
-    title: "AI Language Reviewer",
-    company: "Demo Company F",
-    location: "United States",
-    category: "Language",
-    type: "Remote",
-    salary: "Not disclosed",
-  },
-];
-
-const categories = [
-  "AI Training",
-  "Data Annotation",
-  "Transcription",
-  "Language",
-];
-
-const locations = [
-  "Worldwide",
-  "United States",
-  "Europe",
-];
-
 export default function Home() {
+const [jobs, setJobs] = useState<Job[]>([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function fetchJobs() {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select(
+        "id, title, company, location, category, job_type, salary, apply_url"
+      )
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (cancelled) return;
+
+    if (error) {
+      console.error("Supabase error:", error.message);
+      setError("Unable to load jobs. Please try again later.");
+    } else {
+      const formattedJobs: Job[] = (data ?? []).map((job) => ({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location ?? "Worldwide",
+        category: job.category ?? "Other",
+        type: job.job_type ?? "Remote",
+        salary: job.salary ?? "Not disclosed",
+        apply_url: job.apply_url,
+      }));
+
+      setJobs(formattedJobs);
+      setError("");
+    }
+
+    setLoading(false);
+  }
+
+  fetchJobs();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
   const [language, setLanguage] = useState<Language>("en");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [location, setLocation] = useState("all");
+
+  const categories = useMemo(
+    () => [...new Set(jobs.map((job) => job.category))]
+      .filter(Boolean)
+      .sort(),
+    [jobs]
+  );
+
+  const locations = useMemo(
+    () => [...new Set(jobs.map((job) => job.location))]
+      .filter(Boolean)
+      .sort(),
+    [jobs]
+  );
 
   const t = translations[language];
 
@@ -208,7 +200,7 @@ export default function Home() {
         matchesLocation
       );
     });
-  }, [search, category, location]);
+  }, [jobs, search, category, location]);
 
   const resetFilters = () => {
     setSearch("");
@@ -317,7 +309,9 @@ export default function Home() {
             </h2>
 
             <p className="mt-2 text-sm text-slate-500">
-              {filteredJobs.length} {t.jobsFound}
+              {loading
+                ? (language === "vi" ? "Đang tải công việc..." : "Loading jobs...")
+                : `${filteredJobs.length} ${t.jobsFound}`}
             </p>
           </div>
 
@@ -332,7 +326,7 @@ export default function Home() {
 
         {/* FILTERS */}
         <div className="mb-8 grid gap-4 rounded-xl border border-slate-200 bg-white p-5 md:grid-cols-2">
-
+	
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -367,7 +361,21 @@ export default function Home() {
 
         {/* JOB CARDS */}
         <div className="grid gap-5">
-          {filteredJobs.map((job) => (
+          {error && (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
+            {language === "vi"
+              ? "Không thể tải công việc. Vui lòng thử lại sau."
+              : error}
+          </div>
+        )}
+
+        {loading && (
+          <div role="status" className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+            {language === "vi" ? "Đang tải công việc..." : "Loading jobs..."}
+          </div>
+        )}
+
+        {!loading && !error && filteredJobs.map((job) => (
             <article
               key={job.id}
               className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
@@ -397,25 +405,23 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <p className="mt-4 text-xs text-slate-400">
-                    {t.demoNotice}
-                  </p>
+
                 </div>
 
-                <button
-                  type="button"
-                  disabled
-                  title={t.demoNotice}
-                  className="cursor-not-allowed rounded-lg bg-slate-200 px-6 py-3 text-sm font-semibold text-slate-500"
+                <a
+                  href={job.apply_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-blue-700 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-blue-800"
                 >
                   {t.viewJob}
-                </button>
+                </a>
 
               </div>
             </article>
           ))}
 
-          {filteredJobs.length === 0 && (
+          {!loading && !error && filteredJobs.length === 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-12 text-center">
               <p className="text-slate-500">{t.noJobs}</p>
 
