@@ -164,7 +164,11 @@ useEffect(() => {
   );
 
   const locations = useMemo(
-    () => [...new Set(jobs.map((job) => job.location))]
+    () => [...new Set(
+      jobs.flatMap((job) =>
+        job.location.split(",").map((item) => item.trim())
+      )
+    )]
       .filter(Boolean)
       .sort(),
     [jobs]
@@ -192,7 +196,11 @@ useEffect(() => {
         category === "all" || job.category === category;
 
       const matchesLocation =
-        location === "all" || job.location === location;
+        location === "all" ||
+        job.location
+          .split(",")
+          .map((item) => item.trim())
+          .includes(location);
 
       return (
         matchesSearch &&
